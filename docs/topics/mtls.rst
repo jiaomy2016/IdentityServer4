@@ -6,7 +6,7 @@ Mutual TLS support in IdentityServer allows for two features:
 * Client authentication to IdentityServer endpoints using a TLS X.509 client certificate
 * Binding of access tokens to clients using a TLS X.509 client certificate
 
-.. Note:: See the `"OAuth 2.0 Mutual-TLS Client Authentication and Certificate-Bound Access Tokens" <https://tools.ietf.org/wg/oauth/draft-ietf-oauth-mtls/>`_ spec for more information
+.. Note:: See the `"OAuth 2.0 Mutual-TLS Client Authentication and Certificate-Bound Access Tokens" <https://tools.ietf.org/html/rfc8705>`_ spec for more information
 
 Setting up MTLS involves a couple of steps.
 
@@ -81,7 +81,7 @@ For example::
         options.MutualTls.ClientCertificateAuthenticationScheme = "Certificate";
         
         // uses sub-domain hosting
-        options.DomainName = "mtls";
+        options.MutualTls.DomainName = "mtls";
     });
 
 IdentityServer's discovery document reflects those endpoints:
@@ -233,13 +233,14 @@ Below is a simple middleware that checks the claims::
                         return;
                     }
 
-                    var thumbprint = certResult.Principal.FindFirst(ClaimTypes.Thumbprint).Value;
+                    var certificate = await ctx.Connection.GetClientCertificateAsync();
+                    var thumbprint = Base64UrlTextEncoder.Encode(certificate.GetCertHash(HashAlgorithmName.SHA256));
 
                     var cnf = JObject.Parse(cnfJson);
                     var sha256 = cnf.Value<string>("x5t#S256");
 
                     if (String.IsNullOrWhiteSpace(sha256) ||
-                        !thumbprint.Equals(sha256, StringComparison.OrdinalIgnoreCase))
+                        !thumbprint.Equals(sha256, StringComparison.Ordinal))
                     {
                         await ctx.ChallengeAsync(_options.JwtBearerSchemeName);
                         return;
@@ -249,7 +250,6 @@ Below is a simple middleware that checks the claims::
 
             await _next(ctx);
         }
-    }
 
 Below is an example pipeline for an API::
 
@@ -291,7 +291,7 @@ This is useful for situations where you already have client secrets in place tha
 Still, if a client certificate is present, the confirmation claim can be embedded in outgoing access tokens. And as long as the client is using the same client certitificate to 
 request the token and calling the API, this will give you the desired proof-of-possession properties.
 
-For this enable the following settin in the options::
+For this enable the following setting in the options::
 
     var builder = services.AddIdentityServer(options =>
     {
